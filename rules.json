@@ -1,0 +1,52 @@
+{
+  "mandatory_declarations": {
+    "MRP": {
+      "required": true,
+      "friendly_name": "Maximum Retail Price (MRP)",
+      "patterns": ["mrp", "maximum retail price", "retail price", "m.r.p.", "rs.", "₹", "rs", "max retail price"],
+      "tax_keywords": ["inclusive of all taxes", "incl. of all taxes", "incl of all taxes", "inclusive all taxes", "incl. all taxes", "incl taxes", "incl. taxes"],
+      "description": "Must be declared as 'Maximum Retail Price' or 'MRP' followed by price value in Rupees and mandatory statutory statement 'inclusive of all taxes' or 'incl. of all taxes'.",
+      "clause": "Rule 6(1)(da) of Legal Metrology (Packaged Commodities) Rules, 2011"
+    },
+    "NetQuantity": {
+      "required": true,
+      "friendly_name": "Net Quantity",
+      "patterns": ["net qty", "net quantity", "net weight", "net wt", "net content", "quantity", "net weight/qty"],
+      "allowed_units": ["g", "kg", "ml", "l", "ltr", "n", "pcs", "units", "m", "cm"],
+      "disallowed_units": ["gm", "gms", "gm.", "gms.", "litres.", "liters."],
+      "description": "Must declare net weight, volume, or count in standard metric units (g, kg, ml, l, N, pcs). Non-standard units (e.g. gms, box) are non-compliant.",
+      "clause": "Rule 6(1)(c) of Legal Metrology (Packaged Commodities) Rules, 2011"
+    },
+    "MfgDate": {
+      "required": true,
+      "friendly_name": "Month & Year of Manufacture/Packing",
+      "patterns": ["mfg", "pkg", "packed", "manufactured", "mfg date", "pkg date", "date of mfg", "date of packing", "import date", "pkd", "mfd"],
+      "description": "Must declare month and year in which commodity was manufactured, packed, or imported.",
+      "clause": "Rule 6(1)(d) of Legal Metrology (Packaged Commodities) Rules, 2011"
+    },
+    "Manufacturer": {
+      "required": true,
+      "friendly_name": "Manufacturer/Packer/Importer Details",
+      "patterns": ["mfg by", "manufactured by", "packed by", "packer", "importer", "imported by", "marketed by", "address", "regd office", "pvt. ltd.", "limited", "ltd", "co.", "inc"],
+      "description": "Must declare complete name and postal address of the manufacturer, packer, or importer.",
+      "clause": "Rule 6(1)(a) of Legal Metrology (Packaged Commodities) Rules, 2011"
+    },
+    "ConsumerCare": {
+      "required": true,
+      "friendly_name": "Consumer Care Details",
+      "patterns": ["consumer care", "customer care", "helpline", "toll free", "feedback", "complaints", "email", "phone", "contact us", "care cell"],
+      "description": "Must declare name/designation, address, telephone helpline number, AND email address for consumer grievance redressal.",
+      "clause": "Rule 6(1)(g) of Legal Metrology (Packaged Commodities) Rules, 2011"
+    }
+  },
+  "font_size_rules": {
+    "description": "Minimum height of numerals and letters for declarations under Rule 7",
+    "clause": "Rule 7 of Legal Metrology (Packaged Commodities) Rules, 2011",
+    "brackets": [
+      { "max_quantity_g_ml": 50, "min_height_mm": 1.0 },
+      { "max_quantity_g_ml": 200, "min_height_mm": 2.0 },
+      { "max_quantity_g_ml": 1000, "min_height_mm": 4.0 },
+      { "max_quantity_g_ml": 9999999, "min_height_mm": 6.0 }
+    ]
+  }
+}

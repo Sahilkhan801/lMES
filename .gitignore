@@ -1,0 +1,28 @@
+# Python Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE & Editor Configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp Uploads & Local Backups
+uploads/*
+!uploads/.gitkeep
+scans_db_backup.json
+
+# Scratch & Temporary Testing Scripts
+scratch/
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
