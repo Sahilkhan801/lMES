@@ -29,7 +29,6 @@ def health():
 def serve_upload(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
-# Helper function to read/write from our lightweight JSON Database
 def read_db():
     with db_lock:
         if not os.path.exists(DB_FILE):
@@ -55,18 +54,13 @@ def home():
 def upload():
     if 'image' not in request.files:
         return jsonify({"error": "No image file provided"}), 400
-        
     image = request.files['image']
     if image.filename == '':
         return jsonify({"error": "No selected file"}), 400
-        
-    # Generate unique filename to avoid collision
     ext = os.path.splitext(image.filename)[1]
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(UPLOAD_FOLDER, filename)
     image.save(filepath)
-    
-    # Extract text and bounding box locations
     ocr_result = ocr_service.extract_text(filepath, image.filename)
     if isinstance(ocr_result, dict):
         extracted_text = ocr_result.get("text", "")
@@ -78,19 +72,12 @@ def upload():
         boxes = {}
         img_width = 0
         img_height = 0
-    
-    # Run compliance engine
     report = compliance_checker.check(extracted_text)
-    
-    # Create database record
     scan_id = str(uuid.uuid4().hex[:8])
     product_name = image.filename.replace("_", " ").replace("-", " ").split(".")[0].title()
-    
-    # If it is a generic placeholder or has standard keywords, adjust display name
     for keyword in ["chocolate_bar", "hair_oil", "smartwatch_box", "green_tea"]:
         if keyword in image.filename.lower():
             product_name = keyword.replace("_", " ").title()
-            
     scan_record = {
         "id": scan_id,
         "product_name": product_name,
@@ -106,37 +93,28 @@ def upload():
         "image_width": img_width,
         "image_height": img_height
     }
-    
     db = read_db()
     db.append(scan_record)
     write_db(db)
-    
     return jsonify(scan_record)
 
 @app.route('/api/check_text', methods=['POST'])
 def check_text():
-    # Route for updating/rechecking manual OCR edits
     data = request.get_json()
     if not data or 'text' not in data or 'scan_id' not in data:
         return jsonify({"error": "Invalid request parameters"}), 400
-        
     scan_id = data['scan_id']
     updated_text = data['text']
     product_name = data.get('product_name')
-    
     db = read_db()
     record_index = -1
     for i, rec in enumerate(db):
         if rec['id'] == scan_id:
             record_index = i
             break
-            
     if record_index == -1:
         return jsonify({"error": "Scan record not found"}), 404
-        
-    # Re-run checker on updated text
     report = compliance_checker.check(updated_text)
-    
     db[record_index]["extracted_text"] = updated_text
     db[record_index]["compliance_score"] = report["compliance_score"]
     db[record_index]["overall_status"] = report["overall_status"]
@@ -144,14 +122,12 @@ def check_text():
     db[record_index]["issues"] = report["issues"]
     if product_name:
         db[record_index]["product_name"] = product_name
-        
     write_db(db)
     return jsonify(db[record_index])
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
     db = read_db()
-    # Sort history by timestamp descending (newest first)
     db.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
     return jsonify(db)
 
@@ -192,10 +168,8 @@ def download_pdf(scan_id):
         if rec['id'] == scan_id:
             scan_record = rec
             break
-            
     if not scan_record:
         return "Scan record not found", 404
-        
     try:
         pdf_bytes = pdf_generator.generate_pdf(scan_record, UPLOAD_FOLDER)
         from io import BytesIO
@@ -214,51 +188,29 @@ def download_pdf(scan_id):
 def get_dashboard_stats():
     db = read_db()
     total_scans = len(db)
-    
     if total_scans == 0:
         return jsonify({
-            "total_scans": 0,
-            "compliance_rate": 100,
-            "violations_count": 0,
-            "warnings_count": 0,
-            "passed_count": 0,
-            "violations_by_type": {},
-            "compliance_by_category": {},
-            "recent_activity": []
+            "total_scans": 0, "compliance_rate": 100, "violations_count": 0,
+            "warnings_count": 0, "passed_count": 0, "violations_by_type": {},
+            "compliance_by_category": {}, "recent_activity": []
         })
-        
     passed_count = sum(1 for rec in db if rec.get("overall_status", "").upper() in ["PASSED", "PASS"])
     warning_count = sum(1 for rec in db if rec.get("overall_status", "").upper() in ["WARNING", "PARTIAL", "WARN"])
     failed_count = sum(1 for rec in db if rec.get("overall_status", "").upper() in ["FAILED", "FAIL"])
-    
     compliance_rate = int((passed_count / total_scans) * 100)
-    
-    # Calculate violations by rule type
     violations_by_type = {
-        "MRP Format / Statement": 0,
-        "Net Quantity Unit / Format": 0,
-        "Mfg/Pkg Date Format": 0,
-        "Manufacturer Name/Address": 0,
-        "Consumer Care Details": 0,
-        "Font Size Height": 0
+        "MRP Format / Statement": 0, "Net Quantity Unit / Format": 0,
+        "Mfg/Pkg Date Format": 0, "Manufacturer Name/Address": 0,
+        "Consumer Care Details": 0, "Font Size Height": 0
     }
-    
-    # Mapping system keys to display names for stats
     key_mapping = {
-        "MRP": "MRP Format / Statement",
-        "mrp": "MRP Format / Statement",
-        "NetQuantity": "Net Quantity Unit / Format",
-        "net_quantity": "Net Quantity Unit / Format",
-        "MfgDate": "Mfg/Pkg Date Format",
-        "mfg_date": "Mfg/Pkg Date Format",
-        "Manufacturer": "Manufacturer Name/Address",
-        "manufacturer": "Manufacturer Name/Address",
-        "ConsumerCare": "Consumer Care Details",
-        "consumer_care": "Consumer Care Details",
-        "FontSize": "Font Size Height",
-        "font_size": "Font Size Height"
+        "MRP": "MRP Format / Statement", "mrp": "MRP Format / Statement",
+        "NetQuantity": "Net Quantity Unit / Format", "net_quantity": "Net Quantity Unit / Format",
+        "MfgDate": "Mfg/Pkg Date Format", "mfg_date": "Mfg/Pkg Date Format",
+        "Manufacturer": "Manufacturer Name/Address", "manufacturer": "Manufacturer Name/Address",
+        "ConsumerCare": "Consumer Care Details", "consumer_care": "Consumer Care Details",
+        "FontSize": "Font Size Height", "font_size": "Font Size Height"
     }
-    
     for rec in db:
         results = rec.get("results", {})
         for key, res in results.items():
@@ -266,12 +218,8 @@ def get_dashboard_stats():
                 stat_key = key_mapping.get(key)
                 if stat_key:
                     violations_by_type[stat_key] += 1
-                    
-    # Generate compliance rates for different mock categories
-    # Categories will be guessed from product names
     categories = ["Food & Beverages", "Cosmetics & Personal Care", "Electronics", "Textiles / Others"]
     category_scans = {cat: [] for cat in categories}
-    
     for rec in db:
         name = rec.get("product_name", "").lower()
         if any(x in name for x in ["chocolate", "tea", "flour", "food", "drink", "beverage", "organic"]):
@@ -283,7 +231,6 @@ def get_dashboard_stats():
         else:
             cat = "Textiles / Others"
         category_scans[cat].append(rec)
-        
     compliance_by_category = {}
     for cat, list_scans in category_scans.items():
         if len(list_scans) == 0:
@@ -291,43 +238,33 @@ def get_dashboard_stats():
         else:
             cat_passed = sum(1 for rec in list_scans if rec.get("overall_status", "").upper() in ["PASSED", "PASS"])
             compliance_by_category[cat] = int((cat_passed / len(list_scans)) * 100)
-            
     recent_activity = []
-    # Get last 5 scans
     sorted_scans = sorted(db, key=lambda x: x.get("timestamp", ""), reverse=True)
     for rec in sorted_scans[:5]:
         recent_activity.append({
-            "id": rec.get("id"),
-            "product_name": rec.get("product_name"),
-            "overall_status": rec.get("overall_status"),
-            "compliance_score": rec.get("compliance_score"),
+            "id": rec.get("id"), "product_name": rec.get("product_name"),
+            "overall_status": rec.get("overall_status"), "compliance_score": rec.get("compliance_score"),
             "timestamp": rec.get("timestamp")
         })
-        
     return jsonify({
-        "total_scans": total_scans,
-        "compliance_rate": compliance_rate,
-        "violations_count": failed_count,
-        "warnings_count": warning_count,
-        "passed_count": passed_count,
-        "violations_by_type": violations_by_type,
-        "compliance_by_category": compliance_by_category,
-        "recent_activity": recent_activity
+        "total_scans": total_scans, "compliance_rate": compliance_rate,
+        "violations_count": failed_count, "warnings_count": warning_count,
+        "passed_count": passed_count, "violations_by_type": violations_by_type,
+        "compliance_by_category": compliance_by_category, "recent_activity": recent_activity
     })
+
 @app.route('/analyze', methods=['POST'])
 @app.route('/check_compliance', methods=['POST'])
 def analyze_compliance_text():
     data = request.get_json() or {}
     if not data and request.form:
         data = request.form
-        
     text = data.get("text") or data.get("extracted_text") or data.get("ocr_text") or ""
     font_size_val = data.get("physical_font_size") or data.get("font_size") or 2.0
     try:
         font_size = float(font_size_val)
     except (ValueError, TypeError):
         font_size = 2.0
-        
     report = compliance_checker.check(text, font_size)
     return jsonify(report), 200
 
