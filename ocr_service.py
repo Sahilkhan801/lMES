@@ -9,7 +9,6 @@ import numpy as np
 import re
 import difflib
 
-# 1. Resolve Tesseract Binary Path across Windows and Linux Docker
 def get_tesseract_cmd():
     env_cmd = os.environ.get("TESSERACT_CMD")
     if env_cmd and os.path.exists(env_cmd):
@@ -39,46 +38,36 @@ tess_path = get_tesseract_cmd()
 if tess_path:
     pytesseract.pytesseract.tesseract_cmd = tess_path
 
-# 2. Clean & Sanitize OCR Stream text to strip noise, artifacts, and unreadable characters
 def sanitize_ocr_text(raw_text):
     if not raw_text:
         return ""
-        
     preserve_keywords = [
         'mrp', 'maximum', 'retail', 'price', 'net', 'qty', 'quantity', 'weight', 'wt',
-        'mfg', 'mfd', 'pkg', 'pkd', 'packed', 'manufactured', 'date', 'use', 
-        'best', 'before', 'expiry', 'exp', 'batch', 'lot', 'unit', 'sale', 
-        'incl', 'taxes', 'tax', 'rs', 'inr', 'consumer', 'customer', 'care', 
-        'helpline', 'email', 'phone', 'toll', 'address', 'office', 'marketed', 
-        'imported', 'packer', 'complaint', 'feedback', 'contact', 'pvt', 'ltd', 
+        'mfg', 'mfd', 'pkg', 'pkd', 'packed', 'manufactured', 'date', 'use',
+        'best', 'before', 'expiry', 'exp', 'batch', 'lot', 'unit', 'sale',
+        'incl', 'taxes', 'tax', 'rs', 'inr', 'consumer', 'customer', 'care',
+        'helpline', 'email', 'phone', 'toll', 'address', 'office', 'marketed',
+        'imported', 'packer', 'complaint', 'feedback', 'contact', 'pvt', 'ltd',
         'fssai', 'lic', 'no', 'gram', 'gms', 'kg', 'ml', 'l', 'litre', 'servings',
         'country', 'origin', 'made', 'india'
     ]
-    
     lines = raw_text.split('\n')
     cleaned_lines = []
-    
     for line in lines:
         stripped = line.strip()
-        # Remove non-ASCII leading/trailing symbols & random noise
         stripped = re.sub(r'^[^\x00-\x7F]+|[^\x00-\x7F]+$', '', stripped).strip()
-        # Clean repetitive punctuation marks
         stripped = re.sub(r'[\=\_\~\`\|\^\*\#]+', ' ', stripped).strip()
-        
         if not stripped or len(stripped) < 2:
             continue
-            
         lower = stripped.lower()
         has_keyword = any(kw in lower for kw in preserve_keywords)
         has_dates = bool(re.search(r'\d{1,2}[/\-.]\d{1,2}|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b|\d{1,2}[/\-]\d{2,4}', lower))
         has_prices = bool(re.search(r'rs\.?|₹|\d+\.\d{2}|\d+\s*/\-|\d+\s*\(incl', lower))
         has_numeric = bool(re.search(r'\d{2,}', lower))
-        
         if has_keyword or has_dates or has_prices or has_numeric:
             cleaned_lines.append(stripped)
         elif len(stripped) >= 4 and sum(1 for c in stripped if c.isalnum()) >= 3:
             cleaned_lines.append(stripped)
-            
     seen = set()
     deduped = []
     for line in cleaned_lines:
@@ -86,35 +75,24 @@ def sanitize_ocr_text(raw_text):
         if normalized not in seen and len(normalized) > 1:
             seen.add(normalized)
             deduped.append(line)
-            
     return '\n'.join(deduped).strip()
 
-# 3. OpenCV Computer Vision Preprocessing & CLAHE Enhancement
 def preprocess_and_extract(image_path, lang_str='eng'):
     img = cv2.imread(image_path)
     if img is None:
         raise ValueError("Image file could not be loaded or is corrupted.")
     orig_h, orig_w = img.shape[:2]
-    
-    target_dim = 1600
+    target_dim = 1200
     scale = 1.0
-    if max(orig_h, orig_w) < target_dim or max(orig_h, orig_w) > 2400:
+    if max(orig_h, orig_w) > target_dim or max(orig_h, orig_w) < 600:
         scale = target_dim / float(max(orig_h, orig_w))
-        img = cv2.resize(img, (int(orig_w * scale), int(orig_h * scale)), interpolation=cv2.INTER_CUBIC)
-        
+        img = cv2.resize(img, (int(orig_w * scale), int(orig_h * scale)), interpolation=cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
     enhanced = clahe.apply(gray)
-    _, otsu_thresh = cv2.threshold(enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
     cfg_std = r'--oem 3 --psm 6'
-    cfg_sparse = r'--oem 3 --psm 11'
-    
     t1 = pytesseract.image_to_string(enhanced, config=cfg_std, lang=lang_str)
-    t2 = pytesseract.image_to_string(otsu_thresh, config=cfg_std, lang=lang_str)
-    t3 = pytesseract.image_to_string(enhanced, config=cfg_sparse, lang=lang_str)
-    
-    return f"{t1}\n{t2}\n{t3}", enhanced, scale, orig_w, orig_h
+    return t1, enhanced, scale, orig_w, orig_h
 
 def load_patterns():
     patterns = {
@@ -148,7 +126,6 @@ def fuzzy_match_in_line(pattern, line_text, threshold=0.75):
     if pattern.lower() in line_text.lower():
         idx = line_text.lower().find(pattern.lower())
         return idx, len(pattern)
-    
     words = line_text.split()
     pat_words = pattern.lower().split()
     pat_len = len(pat_words)
@@ -167,38 +144,37 @@ def fuzzy_match_in_line(pattern, line_text, threshold=0.75):
                 char_idx = line_text.lower().find(w.lower())
                 if char_idx != -1:
                     return char_idx, len(w)
-                    
     return -1, 0
 
+_cached_lang_str = None
+
 def extract_text(image_path, original_filename=None):
+    global _cached_lang_str
     if not os.path.exists(image_path):
         return {"text": f"[ERROR] File not found: {os.path.basename(image_path)}", "boxes": {}, "width": 0, "height": 0}
     try:
-        try:
-            available_langs = pytesseract.get_languages()
-        except Exception:
-            available_langs = ['eng']
-        lang_str = 'eng+hin' if 'hin' in available_langs else 'eng'
-
+        if _cached_lang_str is None:
+            try:
+                available_langs = pytesseract.get_languages()
+                _cached_lang_str = 'eng+hin' if 'hin' in available_langs else 'eng'
+            except Exception:
+                _cached_lang_str = 'eng'
+        lang_str = _cached_lang_str
         raw_text, enhanced_img, scale, orig_w, orig_h = preprocess_and_extract(image_path, lang_str)
         clean_text = sanitize_ocr_text(raw_text)
         if not clean_text:
             clean_text = "[NO TEXT DETECTED] Please upload a clearer image label."
-
         ocr_data = pytesseract.image_to_data(Image.fromarray(enhanced_img), config='--oem 3 --psm 6', lang=lang_str, output_type=pytesseract.Output.DICT)
-        
         all_words = []
         words_by_line = {}
         for i in range(len(ocr_data['text'])):
             text_word = ocr_data['text'][i].strip()
             if not text_word:
                 continue
-            
             left = int(ocr_data['left'][i] / scale)
             top = int(ocr_data['top'][i] / scale)
             width = int(ocr_data['width'][i] / scale)
             height = int(ocr_data['height'][i] / scale)
-            
             word_info = {
                 "text": text_word,
                 "left": left,
@@ -211,12 +187,10 @@ def extract_text(image_path, original_filename=None):
                 "index": len(all_words)
             }
             all_words.append(word_info)
-            
             line_key = (word_info["block"], word_info["paragraph"], word_info["line"])
             if line_key not in words_by_line:
                 words_by_line[line_key] = []
             words_by_line[line_key].append(word_info)
-            
         sorted_lines = []
         for line_key, line_words in words_by_line.items():
             line_words.sort(key=lambda w: w["left"])
@@ -224,9 +198,7 @@ def extract_text(image_path, original_filename=None):
             line_top = min(w["top"] for w in line_words)
             sorted_lines.append({"line_key": line_key, "words": line_words, "text": line_text, "top": line_top})
         sorted_lines.sort(key=lambda l: l["top"])
-
         patterns_dict = load_patterns()
-        
         boxes = {}
         for decl_type, patterns in patterns_dict.items():
             matched_words = []
@@ -240,7 +212,6 @@ def extract_text(image_path, original_filename=None):
                         start_char = idx
                         matched_pat_len = match_len
                         break
-                        
                 if start_char != -1:
                     end_char = start_char + matched_pat_len
                     char_to_word = []
@@ -248,14 +219,12 @@ def extract_text(image_path, original_filename=None):
                         for _ in range(len(w["text"])):
                             char_to_word.append(w)
                         char_to_word.append(None)
-                        
                     for c_idx in range(start_char, min(end_char, len(char_to_word))):
                         w = char_to_word[c_idx]
                         if w and w not in matched_words:
                             matched_words.append(w)
                     if matched_words:
                         break
-                    
             if matched_words:
                 merged_indices = {w["index"] for w in matched_words}
                 added = True
@@ -269,7 +238,6 @@ def extract_text(image_path, original_filename=None):
                                 merged_indices.add(w["index"])
                                 added = True
                                 break
-                
                 boxes[decl_type] = {
                     "x": min(all_words[idx]["left"] for idx in merged_indices),
                     "y": min(all_words[idx]["top"] for idx in merged_indices),
@@ -278,7 +246,6 @@ def extract_text(image_path, original_filename=None):
                 }
             else:
                 boxes[decl_type] = None
-
         return {"text": clean_text, "boxes": boxes, "width": orig_w, "height": orig_h}
     except Exception as e:
         return {"text": f"[ERROR] OCR processing failed: {str(e)}", "boxes": {}, "width": 0, "height": 0}
